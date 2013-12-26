@@ -14,6 +14,8 @@ import Data.Attoparsec (Parser, parse, feed)
 import Control.Applicative
 import qualified Data.Map as M
 
+type ChunkParser = C.Result [Frame]
+
 type Header = (Key, Value)
 
 stream :: Parser [Frame]
