@@ -36,7 +36,6 @@ data ClientState = ClientState {
     ,   hostName :: HostName
     ,   portNum :: PortNumber
     ,   receivedBytes :: Int
-    ,   sentBytes :: Int
     ,   lastSubscription :: SubscriptionId
     -- TODO createdAt, lastReceived
     } deriving (Show)
@@ -55,7 +54,7 @@ runAction f client = runStateT f client
 
 stompLoop :: (Frame -> Action b)-> (Handle, String, PortNumber) -> IO ()
 stompLoop handler (h,host,port) = do
-    let client = ClientState h host port 0 0 0
+    let client = ClientState h host port 0 0
     let srv    = ServerState (M.empty)
     hSetBuffering h NoBuffering
     (void $ runAction (go (parse stream B.empty)) client) `finally` hClose h
@@ -78,7 +77,7 @@ tellError msg = liftIO $ print (T.append "client error:" msg)
 
 handleCommand :: (IORef ServerState) -> ClientCommand -> Headers -> Body -> Action ()
 handleCommand ref cmd hdrs body = case cmd of
-    Connect         -> connectClient
+    Connect         -> void connectClient
     Subscribe       -> subscribeClient
     Unsubscribe     -> unsubscribeClient
     Send            -> forwardMessage
@@ -87,7 +86,7 @@ handleCommand ref cmd hdrs body = case cmd of
 
     where connectClient = do
             client <- get
-            liftIO (writeClient client Connected (M.fromList [("version","1.0"),("heartbeat","0,0")]) "") >>= (\len -> modify (\cl -> cl { sentBytes = (sentBytes cl) + len }))
+            liftIO (writeClient client Connected (M.fromList [("version","1.0"),("heartbeat","0,0")]) "")
 
           subscribeClient = do
             let (Just dst) = M.lookup "destination" hdrs 
