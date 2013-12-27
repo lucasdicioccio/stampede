@@ -78,22 +78,29 @@ tellError msg = liftIO $ print (T.append "client error:" msg)
 handleCommand :: (IORef ServerState) -> ClientCommand -> Headers -> Body -> Action ()
 handleCommand ref cmd hdrs body = case cmd of
     Connect         -> void connectClient
+    Stomp           -> void connectClient
+    Disconnect      -> error "not implemented (Disconnect)"
     Subscribe       -> subscribeClient
     Unsubscribe     -> unsubscribeClient
     Send            -> forwardMessage
-    a               -> liftIO $ print a >> print hdrs >> print body
+    Ack             -> error "not implemented (Ack)"
+    Nack            -> error "not implemented (Nack)"
+    Begin           -> error "not implemented (Begin)"
+    Commit          -> error "not implemented (Commit)"
+    Abort           -> error "not implemented (Abort)"
 
 
     where connectClient = do
             client <- get
             liftIO (writeClient client Connected (M.fromList [("version","1.0"),("heartbeat","0,0")]) "")
 
+
           subscribeClient = do
             let (Just dst) = M.lookup "destination" hdrs 
             client <- get
             liftIO $ atomicModifyIORef ref (addSub client dst)
             put (client { lastSubscription = lastSubscription client + 1 })
-            -- todo: answer that subscription worked
+            -- todo: answer with subscription-id that subscription worked/not
             return ()
             where addSub cli dst srv = (ServerState queues', queues')
                               where queues' = M.alter (appendHandle) dst (queues srv)
@@ -106,7 +113,7 @@ handleCommand ref cmd hdrs body = case cmd of
             let (Just subId) = (M.lookup "subscription" hdrs) >>= either (const Nothing) (return . fst) . decimal
             client <- get
             liftIO $ atomicModifyIORef ref (rmSub client dst subId)
-            -- todo: answer that subscription didntwork
+            -- todo: answer that de-subscription worked
             return ()
             where rmSub cli dst subId srv = (ServerState queues', queues')
                               where queues' = M.alter (removeHandle) dst (queues srv)
@@ -126,6 +133,8 @@ writeClient client = writeClientH (handle client)
 
 writeClientH :: Handle -> ServerCommand -> Headers -> Body -> IO (Int)
 writeClientH h cmd hdrs body = do
+    -- todo: handle ioerrors to remove dead clients, ensure atomic access to
+    -- output buffers while writing buffer if not ensured by B.hPut+runtime
     let buf = dump (ServerFrame cmd hdrs body)
     B.hPut h buf
     return $ B.length buf
