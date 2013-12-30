@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Helpers where
+module Stampede.Helpers where
 
-import Stomp
+import Stampede.Stomp
 import qualified Data.Map as M
 import Control.Monad (liftM)
 import Data.Text (Text)

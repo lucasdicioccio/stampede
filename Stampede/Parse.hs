@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Parse where
+module Stampede.Parse where
 
-import Stomp
+import Stampede.Stomp
 import Data.ByteString.Char8 (ByteString, pack)
 import qualified Data.Attoparsec.ByteString.Char8 as C
 import Data.Text (Text)
@@ -14,7 +14,7 @@ import Data.Attoparsec (Parser, parse, feed)
 import Control.Applicative
 import qualified Data.Map as M
 
-type ChunkParser = C.Result [Frame]
+type ChunkParser a = C.Result [a]
 
 type Header = (Key, Value)
 

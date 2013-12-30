@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Dump where
+module Stampede.Dump where
 
-import Stomp
+import Stampede.Stomp
 import Data.ByteString.Char8 (ByteString, pack)
 import qualified Data.ByteString as C
 import qualified Data.Text.Encoding as T

@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Server where
+module Stampede.Server where
 
 import Network
 import Control.Monad
@@ -13,10 +13,10 @@ import qualified Data.Text as T
 import qualified Data.Map as M
 import Data.List (delete)
 
-import Stomp
-import Parse
-import Dump
-import Helpers
+import Stampede.Stomp
+import Stampede.Parse
+import Stampede.Dump
+import Stampede.Helpers
 import Data.Attoparsec (Parser, parse, feed, IResult (..))
 import Data.Text (Text)
 import Data.Text.Read (decimal)
@@ -58,7 +58,7 @@ stompLoop handler (h,host,port) = do
     let srv    = ServerState (M.empty)
     hSetBuffering h NoBuffering
     (void $ runAction (go (parse stream B.empty)) client) `finally` hClose h
-    where go :: ChunkParser -> Action ()
+    where go :: ChunkParser Frame -> Action ()
           go parser = do
             cl <- get
             buf <- liftIO $ B.hGetNonBlocking h 9000
