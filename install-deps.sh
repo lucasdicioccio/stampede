@@ -2,6 +2,7 @@
 
 CHREPO="https://github.com/haskell-distributed"
 DEPS="distributed-process\
+        distributed-process-simplelocalnet\
         distributed-process-platform\
         network-transport\
         distributed-static\
