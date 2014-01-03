@@ -6,6 +6,7 @@ module Stampede.Stomp where
 import Control.Monad
 import Data.Map (Map)
 import Data.Text (Text)
+import Data.Text.Binary
 import Data.Text.Encoding (decodeUtf16LE,encodeUtf16LE)
 import Data.ByteString (ByteString)
 import GHC.Generics
@@ -42,9 +43,6 @@ data Frame = ClientFrame ClientCommand Headers Body
 
 instance Binary ClientCommand where
 instance Binary ServerCommand where
-instance Binary Text where
-    get = liftM decodeUtf16LE get 
-    put = put . encodeUtf16LE
 instance Binary Frame where
 
 clientFrame hs body x = ClientFrame x hs body

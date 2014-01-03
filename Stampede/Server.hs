@@ -94,7 +94,6 @@ handleCommand ref cmd hdrs body = case cmd of
             client <- get
             liftIO (writeClient client Connected (M.fromList [("version","1.0"),("heartbeat","0,0")]) "")
 
-
           subscribeClient = do
             let (Just dst) = M.lookup "destination" hdrs 
             client <- get
