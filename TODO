@@ -1,7 +1,16 @@
 * escape/unescape special chars from headers
-* simple monolithic server to get a rough idea of tricky issues
-  - fast cleanup on unsubscribe (e.g., currently O(log(n)) of number of destination and O(m) of number of subscribees to a destination)
-  - fast cleanup on client death (currently no way of doing it; requires to go through every single subscription)
-  - tricky to keep track of sent bytes to a client
 * distributed-process server
+	- monitor route nodes up/down
+	- support multi DP-node
+	- maybe spawn process for each client command (with a max number of pending process)
+		-> becomes easier to handle individual timeouts
+	- support unsubscribe
+	- kill all processes upon dying connection
+	- kill subscriptions of dead
+	- support for transactions
+	- monitoring of #processes
+* semantics
+	- persistent vs. transient subscription nodes
+		-> metadata about subs
+		-> messages themselves
 * client
