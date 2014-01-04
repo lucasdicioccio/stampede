@@ -1,7 +1,7 @@
 
 module Main where
 
-import Stampede.DServer
+import Stampede.Server
 import Control.Distributed.Process.Backend.SimpleLocalnet   
 import Control.Distributed.Process.Node (runProcess,forkProcess,initRemoteTable)
 
