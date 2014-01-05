@@ -31,21 +31,26 @@ type SubscriptionNodeId = ProcessId
 
 data SubscriptionNode = SubscriptionNode {
         path            :: Destination
-    ,   subscriptions   :: [Subscription]
+    ,   subscriptions   :: [Subscription] -- todo: change representation (e.g., a Set)
     } 
 
 type Requester = ProcessId
 data SubscriptionNodeCommand = GetSubscribees Requester
     deriving (Show, Eq, Typeable, Generic)
-
 instance Binary SubscriptionNodeCommand
+
+data SubscriptionNodeQuery = DoSubscribe Subscription
+    | DoUnsubscribe Subscription
+    deriving (Show, Eq, Typeable, Generic)
+instance Binary SubscriptionNodeQuery
 
 data ClientState = ClientState {
         sktInfo     :: SktInfo
     ,   receivePort :: ReceivePort Frame
     ,   sendPort    :: SendPort Frame
     ,   nSub        :: Int
+    ,   nUnSub      :: Int
     }
 
 client :: SktInfo -> ReceivePort Frame -> SendPort Frame -> ClientState
-client skt rp sp = ClientState skt rp sp 0
+client skt rp sp = ClientState skt rp sp 0 0

@@ -6,20 +6,21 @@ import Stampede.Types
 import Stampede.Utils
 import Control.Monad.State
 import Control.Monad
+import Data.List (delete)
 
 -- Process that stores state about who is subscribed to a given destination
 subscriptionNode :: Destination -> Process ()
 subscriptionNode dst = do
     go (SubscriptionNode dst [])
     where go state = do 
-               newState <- receiveWait [ matchState state handleSubscription
+               newState <- receiveWait [ matchState state handleSubscriptionNodeQuery
                                        , matchState state handleSubscriptionNodeCommand
                                        ]
                go newState
 
-handleSubscription :: Subscription -> Action SubscriptionNode
-handleSubscription sub = do
-    modify (\subNode -> subNode { subscriptions = sub:(subscriptions subNode) })
+handleSubscriptionNodeQuery :: SubscriptionNodeQuery -> Action SubscriptionNode
+handleSubscriptionNodeQuery (DoSubscribe sub)     = modify (\subNode -> subNode { subscriptions = sub:(subscriptions subNode) })
+handleSubscriptionNodeQuery (DoUnsubscribe sub)   = modify (\subNode -> subNode { subscriptions = delete sub (subscriptions subNode) })
 
 handleSubscriptionNodeCommand :: SubscriptionNodeCommand -> Action SubscriptionNode
 handleSubscriptionNodeCommand (GetSubscribees req) = do

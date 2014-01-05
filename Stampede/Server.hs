@@ -17,6 +17,8 @@ import Control.Distributed.Process
 import Data.Binary (Binary, encode, decode)
 import Data.Typeable (Typeable)
 
+import Data.Maybe
+
 import Stampede.Stomp
 import Stampede.Parse
 import Stampede.Dump
@@ -51,7 +53,7 @@ processClientInputLoop _st0 rp = go _st0
     where go :: ClientState -> Process ()
           go st0 = do
             frm <- receiveChanTimeout 1000000 rp --encodes input heartbeat
-            liftIO $ print frm
+            liftIO $ putStrLn $ "in  << " ++ show frm
             runStateT (react frm) st0 >>= go . snd
 
 react :: (Maybe Frame) -> StateT ClientState Process ()
@@ -60,18 +62,19 @@ react (Just (ServerFrame _ _ _))            = error "should die disconnecting cl
 react (Just (ClientFrame cmd hdrs body))    = handleCommand cmd hdrs body
 
 handleCommand :: ClientCommand -> Headers -> Body -> Action ClientState
-handleCommand cmd hdrs body = case cmd of
-    Connect         -> void connectClient
-    Stomp           -> void connectClient
-    Disconnect      -> error "not implemented (Disconnect)"
-    Subscribe       -> subscribeClient
-    Unsubscribe     -> unsubscribeClient
-    Send            -> forwardMessage
-    Ack             -> error "not implemented (Ack)"
-    Nack            -> error "not implemented (Nack)"
-    Begin           -> error "not implemented (Begin)"
-    Commit          -> error "not implemented (Commit)"
-    Abort           -> error "not implemented (Abort)"
+handleCommand cmd hdrs body = do
+    case cmd of
+        Connect         -> void connectClient
+        Stomp           -> void connectClient
+        Disconnect      -> error "not implemented (Disconnect)"
+        Subscribe       -> subscribeClient
+        Unsubscribe     -> unsubscribeClient
+        Send            -> forwardMessage
+        Ack             -> error "not implemented (Ack)"
+        Nack            -> error "not implemented (Nack)"
+        Begin           -> error "not implemented (Begin)"
+        Commit          -> error "not implemented (Commit)"
+        Abort           -> error "not implemented (Abort)"
 
     where connectClient :: Action ClientState
           connectClient = reply Connected [("version","1.0"), ("heart-beat","0,0")] ""
@@ -81,16 +84,22 @@ handleCommand cmd hdrs body = case cmd of
             let (Just dst) = M.lookup "destination" hdrs 
             client <- get
             let subId = T.pack . show $ nSub client
-            let sub = (subId, sendPort client) :: Subscription
+            let sub = DoSubscribe (subId, sendPort client)
+            let ackMod = fromMaybe "auto" (M.lookup "ack" hdrs)
+            -- pass AckMode into sub
             lift $ lookupDestination dst >>= (\pid -> send pid sub)
             modify (\cl -> cl { nSub = nSub client + 1 })
-            --      ack if needed
-            return ()
+            void $ replyReceipt hdrs
 
           unsubscribeClient :: Action ClientState
           unsubscribeClient = do
-            -- todo: unsubscribe and ack if needed
-            return ()
+            let (Just dst) = M.lookup "destination" hdrs 
+            let (Just subId) = M.lookup "id" hdrs 
+            client <- get
+            let unSub = DoUnsubscribe (subId, sendPort client)
+            lift $ lookupDestination dst >>= (\pid -> send pid unSub)
+            modify (\cl -> cl { nUnSub = nUnSub client + 1 })
+            void $ replyReceipt hdrs
 
           forwardMessage :: Action ClientState
           forwardMessage = do
@@ -111,10 +120,15 @@ lookupDestination dst = do
 reply cmd hdrs body = liftM sendPort get >>= \chan -> lift (sendChan chan frm)
     where frm = ServerFrame cmd (M.fromList hdrs) body
 
+replyReceipt hdrs = do
+    let val = M.lookup "receipt" hdrs
+    maybe (return False) (\rcpt -> reply Receipt [("receipt-id",rcpt)] "" >> return True) val
+
 forwardClientOutputLoop :: Handle -> ReceivePort Frame -> Process ()
 forwardClientOutputLoop h rp = go
     where go = do
             frm <- receiveChanTimeout 1000000 rp --encodes output heartbeat
+            liftIO $ putStrLn $ "out >> " ++ show frm
             let buf = maybe "" dump frm
             liftIO $ B.hPut h buf
             go

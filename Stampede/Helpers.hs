@@ -23,7 +23,7 @@ body :: Frame -> Body
 body (ClientFrame _ _ b) = b
 body (ServerFrame _ _ b) = b
 
-readHeader :: (Key -> b) -> Key -> Frame -> Maybe b
+readHeader :: (Value -> b) -> Key -> Frame -> Maybe b
 readHeader f k frm = liftM f (M.lookup k (headers frm))
 
 contentLength :: Frame -> Maybe Int
