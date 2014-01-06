@@ -14,6 +14,7 @@ import qualified Data.Map as M
 import Data.Text.Binary
 
 import Control.Distributed.Process
+import Control.Distributed.Process.Platform.Supervisor
 import Data.Binary (Binary, encode, decode)
 import Data.Typeable (Typeable)
 
@@ -41,19 +42,29 @@ acceptLoop skt = go
 
 clientProcess :: SktInfo -> Process ()
 clientProcess infos@(h,_,_) = do
-    liftIO $ print "spawning client"
     (spIn,rpIn) <- newChan
     (spOut,rpOut) <- newChan
-    spawnLocal (parseClientInputLoop h spIn) >>= link
-    spawnLocal (forwardClientOutputLoop h rpOut) >>= link
-    processClientInputLoop (client infos rpIn spOut) rpIn 
+    _dataIn  <- toChildStart $ parseClientInputLoop h spIn
+    _dataOut <- toChildStart $ forwardClientOutputLoop h rpOut
+    _handler <- toChildStart $ processClientInputLoop (client infos rpIn spOut) rpIn
+    let dataIn = ChildSpec "data-in" Worker Permanent TerminateImmediately _dataIn Nothing 
+    let handler = ChildSpec "handler" Worker Permanent TerminateImmediately _handler Nothing 
+    let dataOut = ChildSpec "data-out" Worker Permanent TerminateImmediately _dataOut Nothing 
+    
+    liftIO $ print "spawning client supervisor for handle:"
+    liftIO $ print h
+    -- uses a supervisor to bind all three processes together and restart dying
+    -- children we should however avoid make sure to close the handle 
+    --
+    -- => todo use a supervisor tree rather than a single supervisor
+    run restartOne [dataIn, dataOut, handler] `finally` (liftIO $ hClose h)
 
 processClientInputLoop :: ClientState -> ReceivePort Frame -> Process ()
 processClientInputLoop _st0 rp = go _st0
     where go :: ClientState -> Process ()
           go st0 = do
             frm <- receiveChanTimeout 1000000 rp --encodes input heartbeat
-            liftIO $ putStrLn $ "in  << " ++ show frm
+            maybe (return ()) (liftIO . putStrLn . ("in  << " ++) . show) frm
             runStateT (react frm) st0 >>= go . snd
 
 react :: (Maybe Frame) -> StateT ClientState Process ()
@@ -128,7 +139,7 @@ forwardClientOutputLoop :: Handle -> ReceivePort Frame -> Process ()
 forwardClientOutputLoop h rp = go
     where go = do
             frm <- receiveChanTimeout 1000000 rp --encodes output heartbeat
-            liftIO $ putStrLn $ "out >> " ++ show frm
+            maybe (return ()) (liftIO . putStrLn . ("out << " ++) . show) frm
             let buf = maybe "" dump frm
             liftIO $ B.hPut h buf
             go
