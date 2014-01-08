@@ -23,6 +23,10 @@ type SubscriptionId = Text
 type Subscription = (SubscriptionId, SendPort Frame)
 type Destination = Text
 
+data AckMode = Auto | Cumulative | Selective
+    deriving (Show, Eq, Typeable, Generic)
+instance Binary AckMode
+
 data RoutingTable = RoutingTable {
         table :: Map Destination SubscriptionNodeId
     }
@@ -39,7 +43,7 @@ data SubscriptionNodeCommand = GetSubscribees Requester
     deriving (Show, Eq, Typeable, Generic)
 instance Binary SubscriptionNodeCommand
 
-data SubscriptionNodeQuery = DoSubscribe Subscription
+data SubscriptionNodeQuery = DoSubscribe AckMode Subscription
     | DoUnsubscribe Subscription
     deriving (Show, Eq, Typeable, Generic)
 instance Binary SubscriptionNodeQuery

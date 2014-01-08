@@ -10,6 +10,7 @@ import qualified Data.ByteString as B
 
 import Data.Attoparsec (Parser, parse, feed, IResult (..))
 import qualified Data.Text as T
+import Data.Text (Text)
 import qualified Data.Map as M
 import Data.Text.Binary
 
@@ -48,16 +49,15 @@ clientProcess infos@(h,_,_) = do
     _dataOut <- toChildStart $ forwardClientOutputLoop h rpOut
     _handler <- toChildStart $ processClientInputLoop (client infos rpIn spOut) rpIn
     let dataIn = ChildSpec "data-in" Worker Permanent TerminateImmediately _dataIn Nothing 
-    let handler = ChildSpec "handler" Worker Permanent TerminateImmediately _handler Nothing 
+    let handler = ChildSpec "handler" Worker Intrinsic TerminateImmediately _handler Nothing 
     let dataOut = ChildSpec "data-out" Worker Permanent TerminateImmediately _dataOut Nothing 
     
     liftIO $ print "spawning client supervisor for handle:"
     liftIO $ print h
     -- uses a supervisor to bind all three processes together and restart dying
     -- children we should however avoid make sure to close the handle 
-    --
-    -- => todo use a supervisor tree rather than a single supervisor
     run restartOne [dataIn, dataOut, handler] `finally` (liftIO $ hClose h)
+    liftIO $ print "client dead"
 
 processClientInputLoop :: ClientState -> ReceivePort Frame -> Process ()
 processClientInputLoop _st0 rp = go _st0
@@ -65,42 +65,50 @@ processClientInputLoop _st0 rp = go _st0
           go st0 = do
             frm <- receiveChanTimeout 1000000 rp --encodes input heartbeat
             maybe (return ()) (liftIO . putStrLn . ("in  << " ++) . show) frm
-            runStateT (react frm) st0 >>= go . snd
+            (continue, newState) <- runStateT (react frm) st0
+            if continue
+            then go newState
+            else return ()
 
-react :: (Maybe Frame) -> StateT ClientState Process ()
-react Nothing                               = return ()
-react (Just (ServerFrame _ _ _))            = error "should die disconnecting client"
+react :: (Maybe Frame) -> StateT ClientState Process Bool
+react Nothing                               = continue
+react (Just (ServerFrame _ _ _))            = replyError "expecting client frame" >> stopHere
 react (Just (ClientFrame cmd hdrs body))    = handleCommand cmd hdrs body
 
-handleCommand :: ClientCommand -> Headers -> Body -> Action ClientState
+continue = return True
+stopHere = return False
+
+handleCommand :: ClientCommand -> Headers -> Body -> StateT ClientState Process Bool
 handleCommand cmd hdrs body = do
     case cmd of
-        Connect         -> void connectClient
-        Stomp           -> void connectClient
-        Disconnect      -> error "not implemented (Disconnect)"
-        Subscribe       -> subscribeClient
-        Unsubscribe     -> unsubscribeClient
-        Send            -> forwardMessage
+        Connect         -> connectClient >> continue
+        Stomp           -> connectClient >> continue
+        Disconnect      -> disconnectClient >> stopHere
+        Subscribe       -> subscribeClient >> continue
+        Unsubscribe     -> unsubscribeClient >> continue
+        Send            -> forwardMessage >> continue
+        Begin           -> error "not implemented (Begin)"
         Ack             -> error "not implemented (Ack)"
         Nack            -> error "not implemented (Nack)"
-        Begin           -> error "not implemented (Begin)"
         Commit          -> error "not implemented (Commit)"
         Abort           -> error "not implemented (Abort)"
 
     where connectClient :: Action ClientState
           connectClient = reply Connected [("version","1.0"), ("heart-beat","0,0")] ""
 
+          disconnectClient :: Action ClientState
+          disconnectClient = replyReceipt hdrs
+
           subscribeClient :: Action ClientState
           subscribeClient = do
             let (Just dst) = M.lookup "destination" hdrs 
             client <- get
             let subId = T.pack . show $ nSub client
-            let sub = DoSubscribe (subId, sendPort client)
-            let ackMod = fromMaybe "auto" (M.lookup "ack" hdrs)
-            -- pass AckMode into sub
+            let ackMod = fromMaybe Auto (M.lookup "ack" hdrs >>= parseAckMod)
+            let sub = DoSubscribe ackMod (subId, sendPort client)
             lift $ lookupDestination dst >>= (\pid -> send pid sub)
             modify (\cl -> cl { nSub = nSub client + 1 })
-            void $ replyReceipt hdrs
+            replyReceipt hdrs
 
           unsubscribeClient :: Action ClientState
           unsubscribeClient = do
@@ -110,7 +118,7 @@ handleCommand cmd hdrs body = do
             let unSub = DoUnsubscribe (subId, sendPort client)
             lift $ lookupDestination dst >>= (\pid -> send pid unSub)
             modify (\cl -> cl { nUnSub = nUnSub client + 1 })
-            void $ replyReceipt hdrs
+            replyReceipt hdrs
 
           forwardMessage :: Action ClientState
           forwardMessage = do
@@ -123,6 +131,12 @@ handleCommand cmd hdrs body = do
                 -- todo: customize frame
                 (mapM_ (\chan -> sendChan chan msg)) sps
 
+parseAckMod :: Value -> Maybe AckMode
+parseAckMod "auto"              = Just $ Auto
+parseAckMod "client"            = Just $ Cumulative
+parseAckMod "client-individual" = Just $ Selective
+parseAckMod _                   = Nothing
+
 lookupDestination :: Destination -> Process SubscriptionNodeId
 lookupDestination dst = do
     getSelfPid >>= (\me -> nsend "stampede.router" (dst, me))
@@ -131,9 +145,11 @@ lookupDestination dst = do
 reply cmd hdrs body = liftM sendPort get >>= \chan -> lift (sendChan chan frm)
     where frm = ServerFrame cmd (M.fromList hdrs) body
 
+replyError msg = reply Error [] msg
+
 replyReceipt hdrs = do
     let val = M.lookup "receipt" hdrs
-    maybe (return False) (\rcpt -> reply Receipt [("receipt-id",rcpt)] "" >> return True) val
+    maybe (return ()) (\rcpt -> reply Receipt [("receipt-id",rcpt)] "") val
 
 forwardClientOutputLoop :: Handle -> ReceivePort Frame -> Process ()
 forwardClientOutputLoop h rp = go

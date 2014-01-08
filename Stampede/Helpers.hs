@@ -59,8 +59,6 @@ destination = readHeader id "destination"
 transaction :: Frame -> Maybe Text
 transaction = readHeader id "transaction"
 
-data AckMode = Auto | Client | ClientIndividual
-
 ack :: Frame -> Maybe Text
 ack = readHeader id "ack"
 

@@ -19,8 +19,14 @@ subscriptionNode dst = do
                go newState
 
 handleSubscriptionNodeQuery :: SubscriptionNodeQuery -> Action SubscriptionNode
-handleSubscriptionNodeQuery (DoSubscribe sub)     = modify (\subNode -> subNode { subscriptions = sub:(subscriptions subNode) })
-handleSubscriptionNodeQuery (DoUnsubscribe sub)   = modify (\subNode -> subNode { subscriptions = delete sub (subscriptions subNode) })
+handleSubscriptionNodeQuery (DoSubscribe ackMod sub)    = subscribe ackMod sub
+handleSubscriptionNodeQuery (DoUnsubscribe sub)         = unsubscribe sub
+
+
+subscribe ackMod sub = modify (\subNode -> subNode { subscriptions = sub:(subscriptions subNode) })
+
+
+unsubscribe sub = modify (\subNode -> subNode { subscriptions = delete sub (subscriptions subNode) })
 
 handleSubscriptionNodeCommand :: SubscriptionNodeCommand -> Action SubscriptionNode
 handleSubscriptionNodeCommand (GetSubscribees req) = do
