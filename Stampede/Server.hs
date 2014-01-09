@@ -72,7 +72,7 @@ processClientInputLoop _st0 rp = go _st0
 
 react :: (Maybe Frame) -> StateT ClientState Process Bool
 react Nothing                               = continue
-react (Just (ServerFrame _ _ _))            = replyError "expecting client frame" >> stopHere
+react (Just (ServerFrame _ _ _))            = replyError "expecting client frame"
 react (Just (ClientFrame cmd hdrs body))    = handleCommand cmd hdrs body
 
 continue = return True
@@ -87,11 +87,11 @@ handleCommand cmd hdrs body = do
         Subscribe       -> subscribeClient >> continue
         Unsubscribe     -> unsubscribeClient >> continue
         Send            -> forwardMessage >> continue
-        Begin           -> error "not implemented (Begin)"
-        Ack             -> error "not implemented (Ack)"
-        Nack            -> error "not implemented (Nack)"
-        Commit          -> error "not implemented (Commit)"
-        Abort           -> error "not implemented (Abort)"
+        Begin           -> replyError "not implemented (Begin)"
+        Ack             -> replyError "not implemented (Ack)"
+        Nack            -> replyError "not implemented (Nack)"
+        Commit          -> replyError "not implemented (Commit)"
+        Abort           -> replyError "not implemented (Abort)"
 
     where connectClient :: Action ClientState
           connectClient = reply Connected [("version","1.0"), ("heart-beat","0,0")] ""
@@ -126,7 +126,7 @@ handleCommand cmd hdrs body = do
             lift $ do
                 self <- getSelfPid
                 lookupDestination dst >>= (\pid -> send pid (GetSubscribees self))
-                sps <- expect
+                sps <- expect -- todo get AckMod and if not auto, start a process to "ack"
                 let msg = ServerFrame Message hdrs body
                 -- todo: customize frame
                 (mapM_ (\chan -> sendChan chan msg)) sps
@@ -145,7 +145,7 @@ lookupDestination dst = do
 reply cmd hdrs body = liftM sendPort get >>= \chan -> lift (sendChan chan frm)
     where frm = ServerFrame cmd (M.fromList hdrs) body
 
-replyError msg = reply Error [] msg
+replyError msg = reply Error [] msg >> stopHere
 
 replyReceipt hdrs = do
     let val = M.lookup "receipt" hdrs
