@@ -87,17 +87,39 @@ handleCommand cmd hdrs body = do
         Subscribe       -> subscribeClient >> continue
         Unsubscribe     -> unsubscribeClient >> continue
         Send            -> forwardMessage >> continue
-        Begin           -> replyError "not implemented (Begin)"
+        Begin           -> beginTransaction >> continue
+        Commit          -> commitTransaction >> continue
+        Abort           -> abortTransaction >> continue
         Ack             -> replyError "not implemented (Ack)"
         Nack            -> replyError "not implemented (Nack)"
-        Commit          -> replyError "not implemented (Commit)"
-        Abort           -> replyError "not implemented (Abort)"
 
     where connectClient :: Action ClientState
           connectClient = reply Connected [("version","1.0"), ("heart-beat","0,0")] ""
 
           disconnectClient :: Action ClientState
           disconnectClient = replyReceipt hdrs
+
+          beginTransaction :: Action ClientState
+          beginTransaction = do
+            let (Just txId) = M.lookup "transaction" hdrs
+            client <- get
+            pid <- spawnLocal $ transaction txId
+            -- todo: store transaction somewhere
+            return ()
+
+          commitTransaction :: Action ClientState
+          commitTransaction = do
+            let (Just txId) = M.lookup "transaction" hdrs
+            client <- get
+            -- todo: get transaction process and ask it to commit
+            return ()
+
+          abortTransaction :: Action ClientState
+          abortTransaction = do
+            let (Just txId) = M.lookup "transaction" hdrs
+            client <- get
+            -- todo: get transaction process and ask it to commit
+            return ()
 
           subscribeClient :: Action ClientState
           subscribeClient = do
@@ -140,6 +162,11 @@ parseAckMod _                   = Nothing
 lookupDestination :: Destination -> Process SubscriptionNodeId
 lookupDestination dst = do
     getSelfPid >>= (\me -> nsend "stampede.router" (dst, me))
+    expect
+
+lookupTransaction :: TransactionId -> Process TransactionNodeId
+lookupTransaction tx = do
+    getSelfPid >>= (\me -> nsend "stampede.router" (tx, me))
     expect
 
 reply cmd hdrs body = liftM sendPort get >>= \chan -> lift (sendChan chan frm)

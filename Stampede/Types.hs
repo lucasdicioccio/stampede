@@ -22,6 +22,7 @@ type SktInfo = (Handle, HostName, PortNumber)
 type SubscriptionId = Text
 type Subscription = (SubscriptionId, SendPort Frame)
 type Destination = Text
+type TransactionId = Text
 
 data AckMode = Auto | Cumulative | Selective
     deriving (Show, Eq, Typeable, Generic)
@@ -36,6 +37,10 @@ type SubscriptionNodeId = ProcessId
 data SubscriptionNode = SubscriptionNode {
         path            :: Destination
     ,   subscriptions   :: [Subscription] -- todo: change representation (e.g., a Set)
+    } 
+
+data TransactionNode = SubscriptionNode {
+        txId            :: TransactionId -- todo: add fields about acked/unacked message/ids, transaction configuration mode etc.
     } 
 
 type Requester = ProcessId

@@ -9,6 +9,7 @@ import qualified Data.Map as M
 import Stampede.Types
 import Stampede.Utils
 import Stampede.SubscriptionNode
+import Stampede.TransactionNode
 
 -- Process that routes requests to a given node
 router :: Process ()
